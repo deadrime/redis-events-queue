@@ -1,0 +1,23 @@
+{
+  "name": "redis-events-queue",
+  "version": "1.0.0",
+  "description": "Simple client for handling Redis streams",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "run": "esr index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deadrime/redis-events-queue.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/deadrime/redis-events-queue/issues"
+  },
+  "homepage": "https://github.com/deadrime/redis-events-queue#readme",
+  "dependencies": {
+    "ioredis": "^5.2.2"
+  }
+}
