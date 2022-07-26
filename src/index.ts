@@ -16,7 +16,7 @@ const parseEvents = (records: any[]) => records.reduce((acc, [eventId, fields]) 
 
 export type Event<T = string> = {
   _eventId: string; // Redis gives data as array, so we can use any name for this field
-  event: T;
+  payload: T;
 }
 
 export type NewEventsHandler<T = Event> = (events: T[]) => Promise<string[]>
@@ -110,19 +110,18 @@ export const subscribeToNewEvents = async <T extends Event = Event>(props: Subsc
 
     try {
       // Get succesfully processed events (array of _eventIds)
-      // Not sure about await
-      const acknowlegedIds = await onNewEvents(eventsArray);
+      onNewEvents(eventsArray).then((acknowlegedIds => {
+        // Probably we want to return non-processed events to queue, but for now we don't know how to do it
+        const returnToQueueIds = eventsArray
+          .map(event => event._eventId)
+          .filter(id => !acknowlegedIds.includes(id));
+        console.log('non-processed event ids', returnToQueueIds);
 
-      // Probably we want to return non-processed events to queue, but for now we don't know how to do it
-      const returnToQueueIds = eventsArray
-        .map(event => event._eventId)
-        .filter(id => !acknowlegedIds.includes(id));
-      console.log('non-processed event ids', returnToQueueIds);
-
-      if (acknowlegedIds.length) {
-        // and mark it as acknowledged
-        await instance.xack(channelKey, channelGroup, ...acknowlegedIds);
-      }
+        if (acknowlegedIds.length) {
+          // and mark it as acknowledged
+          return instance.xack(channelKey, channelGroup, ...acknowlegedIds);
+        }
+      }))
     } catch (error) {
       console.log(error);
     }
