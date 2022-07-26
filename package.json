@@ -2,8 +2,11 @@
   "name": "redis-events-queue",
   "version": "1.0.0",
   "description": "Simple client for handling Redis streams",
-  "main": "index.js",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
     "run": "esr index.ts"
   },
@@ -19,5 +22,9 @@
   "homepage": "https://github.com/deadrime/redis-events-queue#readme",
   "dependencies": {
     "ioredis": "^5.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^18.6.1",
+    "typescript": "^4.7.4"
   }
 }

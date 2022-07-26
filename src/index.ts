@@ -1,8 +1,8 @@
 import Redis, { RedisOptions } from 'ioredis';
 
 // Parse redis events whose format is ['someEventId', 'field1', 'value1', 'field2', 'value2']
-const parseEvents = (records) => records.reduce((acc, [eventId, fields]) => {
-  const event = {};
+const parseEvents = (records: any[]) => records.reduce((acc, [eventId, fields]) => {
+  const event = {} as Record<string, string>;
   for (let i = 0; i < fields.length; i += 2) {
     event[fields[i]] = fields[i + 1];
   }
@@ -53,7 +53,7 @@ export const subscribeToNewEvents = async <T extends Event = Event>(props: Subsc
   try {
     // Create xgroup if not exists
     await instance.xgroup('CREATE', channelKey, channelGroup, '0', 'MKSTREAM');
-  } catch (err) {
+  } catch (err: any) {
     if (!err.message.includes('BUSYGROUP')) {
       throw new Error(err);
     }
@@ -128,3 +128,5 @@ export const subscribeToNewEvents = async <T extends Event = Event>(props: Subsc
     }
   }
 };
+
+export default subscribeToNewEvents
