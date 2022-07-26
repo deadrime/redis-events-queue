@@ -21,6 +21,8 @@ export type Event<T = string> = {
 
 export type NewEventsHandler<T = Event> = (events: T[]) => Promise<string[]>
 
+export type NewEventHandler<T = Event> = (event: T) => Promise<string>
+
 export type SubscribeToNewEventsProps<T = Event> = {
   channelKey: string,
   channelGroup: string,
@@ -28,7 +30,8 @@ export type SubscribeToNewEventsProps<T = Event> = {
   maxEventCount?: number, // maximum events per one xreadgroup
   retryTimeout?: number, // time for return non-processed events back to queue
   checkFrequency?: number, // block time for xreadgroup
-  onNewEvents: NewEventsHandler<T>, // events handler
+  onNewEvents?: NewEventsHandler<T>, // events handler
+  onNewEvent?: NewEventHandler<T>,
   redisOptions?: RedisOptions,
 }
 
@@ -38,6 +41,7 @@ export const subscribeToNewEvents = async <T extends Event = Event>(props: Subsc
     channelGroup,
     consumerId,
     onNewEvents,
+    onNewEvent,
     maxEventCount = 10,
     retryTimeout = 30000,
     checkFrequency = 3000,
@@ -109,8 +113,15 @@ export const subscribeToNewEvents = async <T extends Event = Event>(props: Subsc
     }
 
     try {
+      for (let event of eventsArray) {
+        onNewEvent?.(event)?.then((acknowlegedId) => {
+          if (acknowlegedId) {
+            return instance.xack(channelKey, channelGroup, acknowlegedId);
+          }
+        })
+      }
       // Get succesfully processed events (array of _eventIds)
-      onNewEvents(eventsArray).then((acknowlegedIds => {
+      onNewEvents?.(eventsArray)?.then((acknowlegedIds => {
         // Probably we want to return non-processed events to queue, but for now we don't know how to do it
         const returnToQueueIds = eventsArray
           .map(event => event._eventId)
