@@ -8,7 +8,7 @@ Event format is `['payload', '{ "some": "JSON" }']` (`XADD mystream * payload '{
 # Basic usage
 
 ```ts
-const redisEventsQueue = new RedisStreamClient(
+const myStream = new RedisStreamClient(
   {
     host: 'localhost',
     port: 6379,
@@ -18,9 +18,9 @@ const redisEventsQueue = new RedisStreamClient(
   'someChannelGroup',
 );
 
-redisEventsQueue.publishEvent({ foo: "bar" })
+myStream.publishEvent(myStream.channelKey, { foo: "bar" })
 
-redisEventsQueue.onNewEvent(event => {
+myStream.onNewEvent(event => {
   console.log(event.payload) // { "foo": "bar" }
   return Promise.resolve() // You need to return resolved promise
 })
@@ -29,10 +29,10 @@ redisEventsQueue.onNewEvent(event => {
 # Handling multiple events
 
 ```ts
-redisEventsQueue.publishEvent({ foo: "bar" })
-redisEventsQueue.publishEvent({ foo: "baz" })
+myStream.publishEvent(myStream.channelKey, { foo: "bar" })
+myStream.publishEvent(myStream.channelKey, { foo: "baz" })
 
-redisEventsQueue.onNewEvents(async events => {
+myStream.onNewEvents(async events => {
   const successfullyHandledEventIds = events.map(event => {
     console.log(event.payload) // { "foo": "bar "}, { "foo": "baz" }
     return event._eventId
@@ -56,5 +56,5 @@ type MyPayload = {
 
 type MyEvent = Event<MyPayload>
 
-const redisEventsQueue = new RedisStreamClient<MyEvent>(...)
+const myStream = new RedisStreamClient<MyEvent>(...)
 ```

@@ -9,13 +9,13 @@ type ListenEventsProps<T extends Event> = {
 }
 
 class RedisStreamClient<E extends Event = Event<any>> {
-  private channelKey: string;
   private channelGroup: string;
   private redis: Redis;
   private maxEventCount: number;
   private retryTimeout: number;
   private checkFrequency: number;
   private maxQueueLength: number;
+  channelKey: string;
   consumerId: string;
 
   constructor(
@@ -149,34 +149,9 @@ class RedisStreamClient<E extends Event = Event<any>> {
     this.listenEvents({ onNewEvent: cb })
   }
 
-  async publishEvent(payload: E['payload']) {
-    return await this.redis.call('xadd', this.channelKey, 'MAXLEN', '~', this.maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string
+  async publishEvent(channelKey: string, payload: E['payload'], maxQueueLength: number = this.maxQueueLength) {
+    return await this.redis.call('xadd', channelKey, 'MAXLEN', '~', maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string
   }
 }
-
-const redisEventsQueue = new RedisStreamClient(
-  {
-    host: 'localhost',
-    port: 6379,
-    db: 0,
-  },
-  'someChannelKey',
-  'someChannelGroup',
-);
-
-redisEventsQueue.publishEvent({ foo: "bar" })
-redisEventsQueue.publishEvent({ foo: "baz" })
-
-redisEventsQueue.onNewEvents(async events => {
-  const successfullyHandledEventIds = events.map(event => {
-    console.log(event.payload) // { "foo": "bar "}, { "foo": "baz" }
-    return event._eventId
-  })
-
-  // You need to return every _eventId of event that you successfully handle.
-  // Unhandled events will be returned to the queue
-  return successfullyHandledEventIds
-})
-
 
 export default RedisStreamClient
