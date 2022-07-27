@@ -110,23 +110,31 @@ class RedisStreamClient<E extends Event = Event<any>> {
 
       try {
         for (let event of eventsArray) {
-          onNewEvent?.(event)?.then(() => {
-            return redis.xack(channelKey, channelGroup, event._eventId);
-          })
+          onNewEvent?.(event)
+            .then(() => {
+              return redis.xack(channelKey, channelGroup, event._eventId);
+            })
+            .catch(err => {
+              console.log('Error processing', JSON.stringify(event), err)
+            })
         }
         // Get succesfully processed events (array of _eventIds)
-        onNewEvents?.(eventsArray)?.then((acknowlegedIds => {
-          // Probably we want to return non-processed events to queue, but for now we don't know how to do it
-          const returnToQueueIds = eventsArray
-            .map(event => event._eventId)
-            .filter(id => !acknowlegedIds.includes(id));
-          console.log('non-processed event ids', returnToQueueIds);
+        onNewEvents?.(eventsArray)
+          .then((acknowlegedIds => {
+            // Probably we want to return non-processed events to queue, but for now we don't know how to do it
+            const returnToQueueIds = eventsArray
+              .map(event => event._eventId)
+              .filter(id => !acknowlegedIds.includes(id));
+            console.log('non-processed event ids', returnToQueueIds);
 
-          if (acknowlegedIds.length) {
-            // and mark it as acknowledged
-            return redis.xack(channelKey, channelGroup, ...acknowlegedIds);
-          }
-        }))
+            if (acknowlegedIds.length) {
+              // and mark it as acknowledged
+              return redis.xack(channelKey, channelGroup, ...acknowlegedIds);
+            }
+          }))
+          .catch(error => {
+            console.log('error processing', JSON.stringify(eventsArray), error);
+          })
       } catch (error) {
         console.log(error);
       }
