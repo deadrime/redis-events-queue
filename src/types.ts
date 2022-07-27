@@ -5,4 +5,4 @@ export type Event<T = {}> = {
 
 export type NewEventsHandler<T = Event> = (events: T[]) => Promise<string[]>
 
-export type NewEventHandler<T = Event> = (event: T) => Promise<string>
+export type NewEventHandler<T = Event> = (event: T) => Promise<any>
