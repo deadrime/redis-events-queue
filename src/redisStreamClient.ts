@@ -149,7 +149,7 @@ class RedisStreamClient<E extends Event = Event<any>> {
     this.listenEvents({ onNewEvent: cb })
   }
 
-  async publishEvent(channelKey: string, payload: E['payload'], maxQueueLength: number = this.maxQueueLength) {
+  async publishEvent<T = Event['payload']>(channelKey: string, payload: T, maxQueueLength: number = this.maxQueueLength) {
     return await this.redis.call('xadd', channelKey, 'MAXLEN', '~', maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string
   }
 }
