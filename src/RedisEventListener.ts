@@ -8,7 +8,7 @@ type ListenEventsProps<T extends Event> = {
   onNewEvent?: NewEventHandler<T>,
 }
 
-class RedisStreamClient<E extends Event = Event<any>> {
+export class RedisEventListener<E extends Event = Event<any>> {
   private channelGroup: string;
   private redis: Redis;
   private maxEventCount: number;
@@ -153,5 +153,3 @@ class RedisStreamClient<E extends Event = Event<any>> {
     return await this.redis.call('xadd', channelKey, 'MAXLEN', '~', maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string
   }
 }
-
-export default RedisStreamClient

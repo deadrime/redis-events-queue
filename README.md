@@ -1,6 +1,5 @@
 # Redis events queue client
-Simple client for handling Redis streams.
-This client allow you to subscribe and handle events.
+Simple client for listen and publish events, based on redis streams.
 
 # Event format
 Event format is `['payload', '{ "some": "JSON" }']` (`XADD mystream * payload '{ "some": "JSON" }'`)
@@ -8,19 +7,29 @@ Event format is `['payload', '{ "some": "JSON" }']` (`XADD mystream * payload '{
 # Basic usage
 
 ```ts
-const myStream = new RedisStreamClient(
-  {
-    host: 'localhost',
-    port: 6379,
-    db: 0,
-  },
-  'someChannelKey',
-  'someChannelGroup',
+
+const redisConfig = {
+  host: 'localhost',
+  port: 6379,
+  db: 0,
+},
+
+const channelKey = 'myChannelKey';
+const channelGroup = 'myChannelGroup';
+
+type MyEvent = Event<{ foo: string }>;
+
+const myListener = new RedisEventListener<MyEvent>(
+  redisConfig,
+  channelKey,
+  channelGroup
 );
 
-myStream.publishEvent(myStream.channelKey, { foo: "bar" })
+const myPublisher = new RedisEventPublisher(redisConfig);
 
-myStream.onNewEvent(event => {
+myPublisher.publishEvent<MyEvent>(myListener.channelKey, { foo: "bar" })
+
+myListener.onNewEvent(event => {
   console.log(event.payload) // { "foo": "bar" }
   return Promise.resolve() // You need to return resolved promise
 })
@@ -29,10 +38,10 @@ myStream.onNewEvent(event => {
 # Handling multiple events
 
 ```ts
-myStream.publishEvent(myStream.channelKey, { foo: "bar" })
-myStream.publishEvent(myStream.channelKey, { foo: "baz" })
+myPublisher.publishEvent(myStream.channelKey, { foo: "bar" })
+myPublisher.publishEvent(myStream.channelKey, { foo: "baz" })
 
-myStream.onNewEvents(async events => {
+myListener.onNewEvents(async events => {
   const successfullyHandledEventIds = events.map(event => {
     console.log(event.payload) // { "foo": "bar "}, { "foo": "baz" }
     return event._eventId
@@ -56,5 +65,5 @@ type MyPayload = {
 
 type MyEvent = Event<MyPayload>
 
-const myStream = new RedisStreamClient<MyEvent>(...)
+const myStream = new myListener<MyEvent>(...)
 ```

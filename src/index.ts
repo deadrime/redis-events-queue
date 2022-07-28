@@ -1,3 +1,3 @@
-import RedisStreamClient from './redisStreamClient'
+export * from './RedisEventListener'
+export * from './RedisEventPublisher'
 export * from './types'
-export default RedisStreamClient
