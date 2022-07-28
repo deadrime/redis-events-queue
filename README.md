@@ -12,7 +12,7 @@ const redisConfig = {
   host: 'localhost',
   port: 6379,
   db: 0,
-},
+};
 
 const channelKey = 'myChannelKey';
 const channelGroup = 'myChannelGroup';
