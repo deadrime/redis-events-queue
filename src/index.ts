@@ -1,3 +1,3 @@
-export * from './RedisEventListener'
-export * from './RedisEventPublisher'
-export * from './types'
+export * from './RedisEventListener';
+export * from './RedisEventPublisher';
+export * from './types';

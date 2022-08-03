@@ -1,6 +1,6 @@
 import Redis, { RedisOptions } from 'ioredis';
-import { Event, NewEventsHandler, NewEventHandler } from './types'
-import { parseEvents } from './helpers'
+import { Event, NewEventsHandler, NewEventHandler } from './types';
+import { parseEvents } from './helpers';
 import { v4 as uuidv4 } from 'uuid';
 
 type ListenEventsProps<T extends Event> = {
@@ -8,7 +8,7 @@ type ListenEventsProps<T extends Event> = {
   onNewEvent?: NewEventHandler<T>,
 }
 
-export class RedisEventListener<E extends Event = Event<any>> {
+export class RedisEventListener<E extends Event = Event> {
   private channelGroup: string;
   private redis: Redis;
   private maxEventCount: number;
@@ -25,8 +25,8 @@ export class RedisEventListener<E extends Event = Event<any>> {
     {
       consumerId = uuidv4(),
       maxEventCount = 10,
-      checkFrequency = 3000,
-      retryTimeout = 3000,
+      checkFrequency = 30000, // ms
+      retryTimeout = 60 * 1000 * 5, // ms
       maxQueueLength = 10000,
     } = {}
   ) {
@@ -35,9 +35,9 @@ export class RedisEventListener<E extends Event = Event<any>> {
     this.redis = redis instanceof Redis ? redis : new Redis(redis);
     this.maxEventCount = maxEventCount;
     this.checkFrequency = checkFrequency;
-    this.retryTimeout = retryTimeout
+    this.retryTimeout = retryTimeout;
     this.consumerId = consumerId;
-    this.maxQueueLength = maxQueueLength
+    this.maxQueueLength = maxQueueLength;
   }
 
   private async listenEvents({ onNewEvents, onNewEvent }: ListenEventsProps<E>) {
@@ -49,7 +49,7 @@ export class RedisEventListener<E extends Event = Event<any>> {
       maxEventCount,
       retryTimeout,
       checkFrequency,
-    } = this
+    } = this;
 
     try {
       // Create xgroup if not exists
@@ -108,24 +108,45 @@ export class RedisEventListener<E extends Event = Event<any>> {
         continue;
       }
 
+      const eventIds = eventsArray.map(e => e._eventId);
+
       try {
-        for (let event of eventsArray) {
+        for (const event of eventsArray) {
+          // If callback lag
+          const intervalId = setInterval(async () => {
+            await redis.xclaim(channelKey, channelGroup, consumerId, 0, event._eventId, 'JUSTID');
+          }, checkFrequency - 1000);
+
           onNewEvent?.(event)
             .then(() => {
+              clearInterval(intervalId);
               return redis.xack(channelKey, channelGroup, event._eventId);
             })
             .catch(err => {
-              console.log('Error processing', JSON.stringify(event), err)
-            })
+              clearInterval(intervalId);
+              redis.xclaim(channelKey, channelGroup, consumerId, 0, event._eventId, 'JUSTID', 'IDLE', retryTimeout - 1000);
+              console.log('Error processing', JSON.stringify(event), err);
+            });
         }
+
+        if (!onNewEvents) {
+          continue;
+        }
+
+        const intervalId = setInterval(async () => {
+          await redis.xclaim(channelKey, channelGroup, consumerId, 0, ...eventIds, 'JUSTID');
+        }, checkFrequency - 1000);
+
         // Get succesfully processed events (array of _eventIds)
         onNewEvents?.(eventsArray)
           .then((acknowlegedIds => {
+            clearInterval(intervalId);
             // Probably we want to return non-processed events to queue, but for now we don't know how to do it
             const returnToQueueIds = eventsArray
               .map(event => event._eventId)
               .filter(id => !acknowlegedIds.includes(id));
-            console.log('non-processed event ids', returnToQueueIds);
+
+            redis.xclaim(channelKey, channelGroup, consumerId, 0, ...returnToQueueIds, 'JUSTID', 'IDLE', retryTimeout - 1000);
 
             if (acknowlegedIds.length) {
               // and mark it as acknowledged
@@ -133,8 +154,10 @@ export class RedisEventListener<E extends Event = Event<any>> {
             }
           }))
           .catch(error => {
+            clearInterval(intervalId);
+            redis.xclaim(channelKey, channelGroup, consumerId, 0, ...eventIds, 'JUSTID', 'IDLE', retryTimeout - 1000);
             console.log('error processing', JSON.stringify(eventsArray), error);
-          })
+          });
       } catch (error) {
         console.log(error);
       }
@@ -142,14 +165,14 @@ export class RedisEventListener<E extends Event = Event<any>> {
   }
 
   onNewEvents(cb: NewEventsHandler<E>) {
-    this.listenEvents({ onNewEvents: cb })
+    this.listenEvents({ onNewEvents: cb });
   }
 
   onNewEvent(cb: NewEventHandler<E>) {
-    this.listenEvents({ onNewEvent: cb })
+    this.listenEvents({ onNewEvent: cb });
   }
 
   async publishEvent<T = Event['payload']>(channelKey: string, payload: T, maxQueueLength: number = this.maxQueueLength) {
-    return await this.redis.call('xadd', channelKey, 'MAXLEN', '~', maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string
+    return await this.redis.call('xadd', channelKey, 'MAXLEN', '~', maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string;
   }
 }

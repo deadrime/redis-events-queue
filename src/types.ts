@@ -1,4 +1,4 @@
-export type Event<T = {}> = {
+export type Event<T = Record<string, unknown>> = {
   _eventId: string; // Redis gives data as array, so we can use any name for this field
   payload: T; // JSON
 }
