@@ -11,6 +11,7 @@ type ListenEventsProps<T extends Event> = {
 export class RedisEventListener<E extends Event = Event> {
   private channelGroup: string;
   private redis: Redis;
+  private nonBlockedClient: Redis;
   private maxEventCount: number;
   private retryTimeout: number;
   private checkFrequency: number;
@@ -19,20 +20,21 @@ export class RedisEventListener<E extends Event = Event> {
   consumerId: string;
 
   constructor(
-    redis: Redis | RedisOptions,
+    redis: RedisOptions,
     channelKey: string,
     channelGroup: string,
     {
       consumerId = uuidv4(),
       maxEventCount = 10,
-      checkFrequency = 30000, // ms
-      retryTimeout = 60 * 1000 * 5, // ms
+      checkFrequency = 10000, // ms
+      retryTimeout = 60 * 1000 * 2, // ms, 2 min
       maxQueueLength = 10000,
     } = {}
   ) {
     this.channelKey = channelKey;
     this.channelGroup = channelGroup;
-    this.redis = redis instanceof Redis ? redis : new Redis(redis);
+    this.redis = new Redis(redis);
+    this.nonBlockedClient = new Redis(redis);
     this.maxEventCount = maxEventCount;
     this.checkFrequency = checkFrequency;
     this.retryTimeout = retryTimeout;
@@ -43,6 +45,7 @@ export class RedisEventListener<E extends Event = Event> {
   private async listenEvents({ onNewEvents, onNewEvent }: ListenEventsProps<E>) {
     const {
       redis,
+      nonBlockedClient,
       channelKey,
       channelGroup,
       consumerId,
@@ -114,17 +117,18 @@ export class RedisEventListener<E extends Event = Event> {
         for (const event of eventsArray) {
           // If callback lag
           const intervalId = setInterval(async () => {
-            await redis.xclaim(channelKey, channelGroup, consumerId, 0, event._eventId, 'JUSTID');
-          }, checkFrequency - 1000);
+            await nonBlockedClient.xclaim(channelKey, channelGroup, consumerId, 0, event._eventId, 'JUSTID');
+          }, retryTimeout - 1000);
 
           onNewEvent?.(event)
             .then(() => {
               clearInterval(intervalId);
-              return redis.xack(channelKey, channelGroup, event._eventId);
+              nonBlockedClient.xack(channelKey, channelGroup, event._eventId);
             })
             .catch(err => {
+              console.log(err);
               clearInterval(intervalId);
-              redis.xclaim(channelKey, channelGroup, consumerId, 0, event._eventId, 'JUSTID', 'IDLE', retryTimeout - 1000);
+              nonBlockedClient.xclaim(channelKey, channelGroup, consumerId, 0, event._eventId, 'JUSTID', 'IDLE', retryTimeout - 1000);
               console.log('Error processing', JSON.stringify(event), err);
             });
         }
@@ -134,28 +138,30 @@ export class RedisEventListener<E extends Event = Event> {
         }
 
         const intervalId = setInterval(async () => {
-          await redis.xclaim(channelKey, channelGroup, consumerId, 0, ...eventIds, 'JUSTID');
-        }, checkFrequency - 1000);
+          await nonBlockedClient.xclaim(channelKey, channelGroup, consumerId, 0, ...eventIds, 'JUSTID');
+        }, retryTimeout - 1000);
 
         // Get succesfully processed events (array of _eventIds)
         onNewEvents?.(eventsArray)
           .then((acknowlegedIds => {
             clearInterval(intervalId);
-            // Probably we want to return non-processed events to queue, but for now we don't know how to do it
+
             const returnToQueueIds = eventsArray
               .map(event => event._eventId)
               .filter(id => !acknowlegedIds.includes(id));
 
-            redis.xclaim(channelKey, channelGroup, consumerId, 0, ...returnToQueueIds, 'JUSTID', 'IDLE', retryTimeout - 1000);
+            // Return non-processed events to queue
+            nonBlockedClient.xclaim(channelKey, channelGroup, consumerId, 0, ...returnToQueueIds, 'JUSTID', 'IDLE', retryTimeout - 1000);
 
             if (acknowlegedIds.length) {
               // and mark it as acknowledged
-              return redis.xack(channelKey, channelGroup, ...acknowlegedIds);
+              return nonBlockedClient.xack(channelKey, channelGroup, ...acknowlegedIds);
             }
           }))
           .catch(error => {
             clearInterval(intervalId);
-            redis.xclaim(channelKey, channelGroup, consumerId, 0, ...eventIds, 'JUSTID', 'IDLE', retryTimeout - 1000);
+            // Return failed event to queue
+            nonBlockedClient.xclaim(channelKey, channelGroup, consumerId, 0, ...eventIds, 'JUSTID', 'IDLE', retryTimeout - 1000);
             console.log('error processing', JSON.stringify(eventsArray), error);
           });
       } catch (error) {
