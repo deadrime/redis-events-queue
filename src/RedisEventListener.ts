@@ -6,11 +6,12 @@ import { v4 as uuidv4 } from 'uuid';
 type ListenEventsProps<T extends Event> = {
   onNewEvents?: NewEventsHandler<T>, // events handler
   onNewEvent?: NewEventHandler<T>,
+  onEventProcessingError?: (error: Error, event: Event) => void;
+  onMultipleEventsProcessingError?: (error: Error, events: Event[]) => void;
 }
 
 export class RedisEventListener<E extends Event = Event> {
   private channelGroup: string;
-  private redis: Redis;
   private nonBlockedClient: Redis;
   private maxEventCount: number;
   private retryTimeout: number;
@@ -18,6 +19,9 @@ export class RedisEventListener<E extends Event = Event> {
   private maxQueueLength: number;
   channelKey: string;
   consumerId: string;
+  redis: Redis;
+  eventProcessingErrorHandler: ((error: Error, event: Event) => void) | null;
+  multipleEventsProcessingErrorHandler: ((error: Error, events: Event[]) => void) | null;
 
   constructor(
     redis: RedisOptions,
@@ -40,6 +44,8 @@ export class RedisEventListener<E extends Event = Event> {
     this.retryTimeout = retryTimeout;
     this.consumerId = consumerId;
     this.maxQueueLength = maxQueueLength;
+    this.eventProcessingErrorHandler = null;
+    this.multipleEventsProcessingErrorHandler = null;
   }
 
   private async listenEvents({ onNewEvents, onNewEvent }: ListenEventsProps<E>) {
@@ -130,6 +136,7 @@ export class RedisEventListener<E extends Event = Event> {
               clearInterval(intervalId);
               nonBlockedClient.xclaim(channelKey, channelGroup, consumerId, 0, event._eventId, 'JUSTID', 'IDLE', retryTimeout - 1000);
               console.log('Error processing', JSON.stringify(event), err);
+              this.eventProcessingErrorHandler?.(err, event);
             });
         }
 
@@ -163,6 +170,7 @@ export class RedisEventListener<E extends Event = Event> {
             // Return failed event to queue
             nonBlockedClient.xclaim(channelKey, channelGroup, consumerId, 0, ...eventIds, 'JUSTID', 'IDLE', retryTimeout - 1000);
             console.log('error processing', JSON.stringify(eventsArray), error);
+            this.multipleEventsProcessingErrorHandler?.(error, eventsArray);
           });
       } catch (error) {
         console.log(error);
@@ -176,6 +184,14 @@ export class RedisEventListener<E extends Event = Event> {
 
   onNewEvent(cb: NewEventHandler<E>) {
     this.listenEvents({ onNewEvent: cb });
+  }
+
+  onEventProcessingError(cb: (err: Error, event: Event) => void) {
+    this.eventProcessingErrorHandler = cb;
+  }
+
+  onMultipleEventsProcessingError (cb: (err: Error, events: Event[]) => void) {
+    this.multipleEventsProcessingErrorHandler = cb;
   }
 
   async publishEvent<T = Event['payload']>(channelKey: string, payload: T, maxQueueLength: number = this.maxQueueLength) {
