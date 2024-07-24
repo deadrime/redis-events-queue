@@ -190,11 +190,11 @@ export class RedisEventListener<E extends Event = Event> {
     this.eventProcessingErrorHandler = cb;
   }
 
-  onMultipleEventsProcessingError (cb: (err: Error, events: Event[]) => void) {
+  onMultipleEventsProcessingError(cb: (err: Error, events: Event[]) => void) {
     this.multipleEventsProcessingErrorHandler = cb;
   }
 
   async publishEvent<T = Event['payload']>(channelKey: string, payload: T, maxQueueLength: number = this.maxQueueLength) {
-    return await this.redis.call('xadd', channelKey, 'MAXLEN', '~', maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string;
+    return await this.nonBlockedClient.call('xadd', channelKey, 'MAXLEN', '~', maxQueueLength, '*', 'payload', JSON.stringify(payload)) as string;
   }
 }
